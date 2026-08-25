@@ -40,7 +40,7 @@ helm install alertmanager-mcp deployment/helm \
 | alertmanager.username | string | `""` | Basic auth username (creates a Secret if set) |
 | fullnameOverride | string | `""` | Override the full release name |
 | image.pullPolicy | string | `"IfNotPresent"` | Image pull policy |
-| image.repository | string | `"alertmanager-mcp"` | Image repository |
+| image.repository | string | `"ghcr.io/nilsgriebner/prometheus-alertmanager-mcp"` | Image repository |
 | image.tag | string | `""` | Image tag (defaults to chart appVersion) |
 | imagePullSecrets | list | `[]` | Image pull secrets |
 | log.level | string | `"info"` | Log level (debug, info, warn, error) |

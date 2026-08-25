@@ -3,7 +3,7 @@ replicaCount: 1
 
 image:
   # -- Image repository
-  repository: alertmanager-mcp
+  repository: ghcr.io/nilsgriebner/prometheus-alertmanager-mcp
   # -- Image tag (defaults to chart appVersion)
   tag: ""
   # -- Image pull policy
