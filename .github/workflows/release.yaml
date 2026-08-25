@@ -31,7 +31,7 @@ jobs:
           sed -i "s/^appVersion:.*/appVersion: \"${{ steps.version.outputs.version }}\"/" deployment/helm/Chart.yaml
 
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
