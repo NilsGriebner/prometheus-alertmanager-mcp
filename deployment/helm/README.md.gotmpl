@@ -1,0 +1,33 @@
+{{ template "chart.header" . }}
+
+{{ template "chart.badgesSection" . }}
+
+{{ template "chart.description" . }}
+
+## Installation
+
+```bash
+helm install alertmanager-mcp deployment/helm \
+  --set alertmanager.url=http://alertmanager:9093
+```
+
+### With basic auth
+
+```bash
+helm install alertmanager-mcp deployment/helm \
+  --set alertmanager.url=http://alertmanager:9093 \
+  --set alertmanager.username=admin \
+  --set alertmanager.password=secret
+```
+
+### With an existing secret
+
+```bash
+helm install alertmanager-mcp deployment/helm \
+  --set alertmanager.url=http://alertmanager:9093 \
+  --set alertmanager.existingSecret=my-alertmanager-credentials
+```
+
+{{ template "chart.valuesSection" . }}
+
+{{ template "helm-docs.versionFooter" . }}

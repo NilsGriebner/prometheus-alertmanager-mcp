@@ -1,0 +1,56 @@
+# -- Number of replicas
+replicaCount: 1
+
+image:
+  # -- Image repository
+  repository: alertmanager-mcp
+  # -- Image tag (defaults to chart appVersion)
+  tag: ""
+  # -- Image pull policy
+  pullPolicy: IfNotPresent
+
+# -- Image pull secrets
+imagePullSecrets: []
+# -- Override the chart name
+nameOverride: ""
+# -- Override the full release name
+fullnameOverride: ""
+
+service:
+  # -- Service type
+  type: ClusterIP
+  # -- Service port
+  port: 8080
+
+alertmanager:
+  # -- Alertmanager base URL (required)
+  url: ""
+  # -- Basic auth username (creates a Secret if set)
+  username: ""
+  # -- Name of an existing Secret for basic auth credentials (overrides username/password)
+  existingSecret: ""
+  secretKeys:
+    # -- Key in the Secret containing the username
+    username: username
+    # -- Key in the Secret containing the password
+    password: password
+
+mcp:
+  # -- Address the MCP server listens on
+  listenAddress: ":8080"
+
+log:
+  # -- Log level (debug, info, warn, error)
+  level: info
+
+# -- Resource requests and limits
+resources: {}
+
+# -- Node selector
+nodeSelector: {}
+
+# -- Tolerations
+tolerations: []
+
+# -- Affinity rules
+affinity: {}
