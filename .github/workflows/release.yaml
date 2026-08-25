@@ -18,6 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          ref: main
           fetch-depth: 0
 
       - name: Determine version
@@ -83,6 +84,9 @@ jobs:
           name: ${{ github.ref_name }}
           body: ${{ steps.changelog.outputs.changes }}
           token: ${{ github.token }}
+
+      - name: Ensure CHANGELOG.md exists
+        run: touch CHANGELOG.md
 
       - name: Commit CHANGELOG.md and Chart.yaml
         uses: stefanzweifel/git-auto-commit-action@v7
