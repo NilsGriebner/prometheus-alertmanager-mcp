@@ -7,14 +7,16 @@ MCP server for Prometheus Alertmanager
 ## Installation
 
 ```bash
-helm install alertmanager-mcp deployment/helm \
+helm install alertmanager-mcp \
+  oci://ghcr.io/nilsgriebner/charts/alertmanager-mcp \
   --set alertmanager.url=http://alertmanager:9093
 ```
 
 ### With basic auth
 
 ```bash
-helm install alertmanager-mcp deployment/helm \
+helm install alertmanager-mcp \
+  oci://ghcr.io/nilsgriebner/charts/alertmanager-mcp \
   --set alertmanager.url=http://alertmanager:9093 \
   --set alertmanager.username=admin \
   --set alertmanager.password=secret
@@ -23,7 +25,8 @@ helm install alertmanager-mcp deployment/helm \
 ### With an existing secret
 
 ```bash
-helm install alertmanager-mcp deployment/helm \
+helm install alertmanager-mcp \
+  oci://ghcr.io/nilsgriebner/charts/alertmanager-mcp \
   --set alertmanager.url=http://alertmanager:9093 \
   --set alertmanager.existingSecret=my-alertmanager-credentials
 ```
