@@ -4,15 +4,14 @@ import (
 	"alertmanagermcp/internal/alertmanager"
 
 	mcpserver "github.com/mark3labs/mcp-go/server"
-	"github.com/rs/zerolog"
 )
 
 // NewServer creates a configured MCP server with all Alertmanager tools registered.
 func NewServer(
-	alertmanagerURL string, logger zerolog.Logger,
+	alertmanagerURL string,
 	clientOpts ...alertmanager.ClientOption,
 ) *mcpserver.MCPServer {
-	client := alertmanager.NewClient(alertmanagerURL, logger, clientOpts...)
+	client := alertmanager.NewClient(alertmanagerURL, clientOpts...)
 
 	s := mcpserver.NewMCPServer(
 		"alertmanager-mcp",

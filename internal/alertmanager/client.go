@@ -13,13 +13,12 @@ import (
 	"github.com/prometheus/alertmanager/api/v2/client/receiver"
 	"github.com/prometheus/alertmanager/api/v2/client/silence"
 	"github.com/prometheus/alertmanager/api/v2/models"
-	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 )
 
 // Client wraps the Alertmanager v2 API client.
 type Client struct {
-	api    *amclient.AlertmanagerAPI
-	logger zerolog.Logger
+	api *amclient.AlertmanagerAPI
 }
 
 type ClientOption func(*clientConfig)
@@ -36,7 +35,7 @@ func WithBasicAuth(username, password string) ClientOption {
 	}
 }
 
-func NewClient(baseURL string, logger zerolog.Logger, opts ...ClientOption) *Client {
+func NewClient(baseURL string, opts ...ClientOption) *Client {
 	cfg := &clientConfig{}
 	for _, opt := range opts {
 		opt(cfg)
@@ -49,14 +48,17 @@ func NewClient(baseURL string, logger zerolog.Logger, opts ...ClientOption) *Cli
 		schemes = []string{"http"}
 	}
 
-	transport := httptransport.New(host, amclient.DefaultBasePath, schemes)
+	transport := httptransport.New(
+		host, amclient.DefaultBasePath, schemes,
+	)
 	if cfg.username != "" {
-		transport.DefaultAuthentication = httptransport.BasicAuth(cfg.username, cfg.password)
+		transport.DefaultAuthentication = httptransport.BasicAuth(
+			cfg.username, cfg.password,
+		)
 	}
 
 	return &Client{
-		api:    amclient.New(transport, strfmt.Default),
-		logger: logger.With().Str("component", "alertmanager-client").Logger(),
+		api: amclient.New(transport, strfmt.Default),
 	}
 }
 
@@ -64,7 +66,7 @@ func (c *Client) ListAlerts(
 	ctx context.Context, filter []string,
 	active, silenced, inhibited, unprocessed bool,
 ) (models.GettableAlerts, error) {
-	c.logger.Debug().Strs("filter", filter).Msg("listing alerts")
+	log.Debug().Strs("filter", filter).Msg("listing alerts")
 
 	params := alert.NewGetAlertsParamsWithContext(ctx).
 		WithFilter(filter).
@@ -75,7 +77,7 @@ func (c *Client) ListAlerts(
 
 	resp, err := c.api.Alert.GetAlerts(params)
 	if err != nil {
-		c.logger.Error().Err(err).Msg("failed to list alerts")
+		log.Error().Err(err).Msg("failed to list alerts")
 		return nil, err
 	}
 
@@ -86,7 +88,7 @@ func (c *Client) GetAlertGroups(
 	ctx context.Context, filter []string,
 	active, silenced, inhibited bool,
 ) (models.AlertGroups, error) {
-	c.logger.Debug().Strs("filter", filter).Msg("getting alert groups")
+	log.Debug().Strs("filter", filter).Msg("getting alert groups")
 
 	params := alertgroup.NewGetAlertGroupsParamsWithContext(ctx).
 		WithFilter(filter).
@@ -96,52 +98,58 @@ func (c *Client) GetAlertGroups(
 
 	resp, err := c.api.Alertgroup.GetAlertGroups(params)
 	if err != nil {
-		c.logger.Error().Err(err).Msg("failed to get alert groups")
+		log.Error().Err(err).Msg("failed to get alert groups")
 		return nil, err
 	}
 
 	return resp.Payload, nil
 }
 
-func (c *Client) ListSilences(ctx context.Context, filter []string) (models.GettableSilences, error) {
-	c.logger.Debug().Strs("filter", filter).Msg("listing silences")
+func (c *Client) ListSilences(
+	ctx context.Context, filter []string,
+) (models.GettableSilences, error) {
+	log.Debug().Strs("filter", filter).Msg("listing silences")
 
 	params := silence.NewGetSilencesParamsWithContext(ctx).
 		WithFilter(filter)
 
 	resp, err := c.api.Silence.GetSilences(params)
 	if err != nil {
-		c.logger.Error().Err(err).Msg("failed to list silences")
+		log.Error().Err(err).Msg("failed to list silences")
 		return nil, err
 	}
 
 	return resp.Payload, nil
 }
 
-func (c *Client) GetSilence(ctx context.Context, id string) (*models.GettableSilence, error) {
-	c.logger.Debug().Str("id", id).Msg("getting silence")
+func (c *Client) GetSilence(
+	ctx context.Context, id string,
+) (*models.GettableSilence, error) {
+	log.Debug().Str("id", id).Msg("getting silence")
 
 	params := silence.NewGetSilenceParamsWithContext(ctx).
 		WithSilenceID(strfmt.UUID(id))
 
 	resp, err := c.api.Silence.GetSilence(params)
 	if err != nil {
-		c.logger.Error().Err(err).Str("id", id).Msg("failed to get silence")
+		log.Error().Err(err).Str("id", id).Msg("failed to get silence")
 		return nil, err
 	}
 
 	return resp.Payload, nil
 }
 
-func (c *Client) CreateSilence(ctx context.Context, s *models.PostableSilence) (string, error) {
-	c.logger.Debug().Msg("creating silence")
+func (c *Client) CreateSilence(
+	ctx context.Context, s *models.PostableSilence,
+) (string, error) {
+	log.Debug().Msg("creating silence")
 
 	params := silence.NewPostSilencesParamsWithContext(ctx).
 		WithSilence(s)
 
 	resp, err := c.api.Silence.PostSilences(params)
 	if err != nil {
-		c.logger.Error().Err(err).Msg("failed to create silence")
+		log.Error().Err(err).Msg("failed to create silence")
 		return "", err
 	}
 
@@ -149,38 +157,46 @@ func (c *Client) CreateSilence(ctx context.Context, s *models.PostableSilence) (
 }
 
 func (c *Client) DeleteSilence(ctx context.Context, id string) error {
-	c.logger.Debug().Str("id", id).Msg("deleting silence")
+	log.Debug().Str("id", id).Msg("deleting silence")
 
 	params := silence.NewDeleteSilenceParamsWithContext(ctx).
 		WithSilenceID(strfmt.UUID(id))
 
 	_, err := c.api.Silence.DeleteSilence(params)
 	if err != nil {
-		c.logger.Error().Err(err).Str("id", id).Msg("failed to delete silence")
+		log.Error().Err(err).Str("id", id).Msg("failed to delete silence")
 		return err
 	}
 
 	return nil
 }
 
-func (c *Client) GetStatus(ctx context.Context) (*models.AlertmanagerStatus, error) {
-	c.logger.Debug().Msg("getting status")
+func (c *Client) GetStatus(
+	ctx context.Context,
+) (*models.AlertmanagerStatus, error) {
+	log.Debug().Msg("getting status")
 
-	resp, err := c.api.General.GetStatus(general.NewGetStatusParamsWithContext(ctx))
+	resp, err := c.api.General.GetStatus(
+		general.NewGetStatusParamsWithContext(ctx),
+	)
 	if err != nil {
-		c.logger.Error().Err(err).Msg("failed to get status")
+		log.Error().Err(err).Msg("failed to get status")
 		return nil, err
 	}
 
 	return resp.Payload, nil
 }
 
-func (c *Client) ListReceivers(ctx context.Context) ([]*models.Receiver, error) {
-	c.logger.Debug().Msg("listing receivers")
+func (c *Client) ListReceivers(
+	ctx context.Context,
+) ([]*models.Receiver, error) {
+	log.Debug().Msg("listing receivers")
 
-	resp, err := c.api.Receiver.GetReceivers(receiver.NewGetReceiversParamsWithContext(ctx))
+	resp, err := c.api.Receiver.GetReceivers(
+		receiver.NewGetReceiversParamsWithContext(ctx),
+	)
 	if err != nil {
-		c.logger.Error().Err(err).Msg("failed to list receivers")
+		log.Error().Err(err).Msg("failed to list receivers")
 		return nil, err
 	}
 

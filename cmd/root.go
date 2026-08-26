@@ -22,7 +22,7 @@ func newRootCmd() *cobra.Command {
 		Long: "An MCP (Model Context Protocol) server that " +
 			"exposes Prometheus Alertmanager operations as tools.",
 		RunE: func(_ *cobra.Command, _ []string) error {
-			logger := setupLogger()
+			configureLogging()
 
 			alertmanagerURL := viper.GetString("alertmanager.url")
 			if alertmanagerURL == "" {
@@ -41,14 +41,12 @@ func newRootCmd() *cobra.Command {
 				)
 			}
 
-			s := internalmcp.NewServer(
-				alertmanagerURL, logger, clientOpts...,
-			)
+			s := internalmcp.NewServer(alertmanagerURL, clientOpts...)
 
 			addr := viper.GetString("mcp.listen.address")
 			httpServer := server.NewStreamableHTTPServer(s)
 
-			logger.Info().
+			log.Info().
 				Str("alertmanager_url", alertmanagerURL).
 				Str("listen_address", addr).
 				Msg("starting alertmanager-mcp server")
@@ -115,14 +113,10 @@ func mustBindEnv(key, env string) {
 	}
 }
 
-func setupLogger() zerolog.Logger {
+func configureLogging() {
 	level, err := zerolog.ParseLevel(viper.GetString("log.level"))
 	if err != nil {
-		level = zerolog.InfoLevel
+		log.Fatal().Err(err).Msg("unable to parse log level")
 	}
-
-	logger := zerolog.New(os.Stderr).With().Timestamp().Logger().Level(level)
-	log.Logger = logger //nolint:reassign // intentionally setting global logger
-
-	return logger
+	zerolog.SetGlobalLevel(level)
 }
