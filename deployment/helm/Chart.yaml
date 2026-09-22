@@ -1,6 +1,0 @@
-apiVersion: v2
-name: alertmanager-mcp
-description: MCP server for Prometheus Alertmanager
-type: application
-version: 0.0.3
-appVersion: "0.0.3"

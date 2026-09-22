@@ -24,16 +24,6 @@ jobs:
         with:
           version: v2.11
 
-  helm-lint:
-    name: helm-lint
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: azure/setup-helm@v4
-
-      - run: helm lint deployment/helm --set alertmanager.url=http://alertmanager:9093
-
   docker-build:
     name: docker-build
     runs-on: ubuntu-latest
