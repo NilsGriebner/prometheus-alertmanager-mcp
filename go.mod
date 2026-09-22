@@ -6,7 +6,7 @@ require (
 	github.com/go-openapi/runtime v0.33.1
 	github.com/go-openapi/strfmt v0.27.0
 	github.com/mark3labs/mcp-go v0.58.0
-	github.com/prometheus/alertmanager v0.34.0
+	github.com/prometheus/alertmanager v0.34.1
 	github.com/rs/zerolog v1.35.1
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
