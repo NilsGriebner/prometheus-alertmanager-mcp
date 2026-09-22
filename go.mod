@@ -1,4 +1,4 @@
-module alertmanagermcp
+module github.com/NilsGriebner/prometheus-alertmanager-mcp
 
 go 1.26.1
 

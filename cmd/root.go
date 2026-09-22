@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"alertmanagermcp/internal/alertmanager"
-	internalmcp "alertmanagermcp/internal/mcp"
+	"github.com/NilsGriebner/prometheus-alertmanager-mcp/internal/alertmanager"
+	internalmcp "github.com/NilsGriebner/prometheus-alertmanager-mcp/internal/mcp"
 
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/rs/zerolog"
