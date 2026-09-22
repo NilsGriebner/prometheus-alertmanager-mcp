@@ -16,6 +16,12 @@ import (
 	"github.com/spf13/viper"
 )
 
+// Supported MCP transports.
+const (
+	transportStdio = "stdio"
+	transportHTTP  = "http"
+)
+
 func newRootCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "alertmanager-mcp",
@@ -27,6 +33,10 @@ func newRootCmd() *cobra.Command {
 		},
 	}
 
+	cmd.Flags().String(
+		"mcp.transport", transportHTTP,
+		"MCP transport: stdio (client owns the process) or http",
+	)
 	cmd.Flags().String(
 		"mcp.listen.address", ":8080",
 		"Address to listen on (e.g. :8080, 0.0.0.0:9094)",
@@ -72,6 +82,7 @@ func newRootCmd() *cobra.Command {
 		"Log level (debug, info, warn, error)",
 	)
 
+	mustBindPFlag("mcp.transport", cmd)
 	mustBindPFlag("mcp.listen.address", cmd)
 	mustBindPFlag("alertmanager.url", cmd)
 	mustBindPFlag("alertmanager.username", cmd)
@@ -107,15 +118,32 @@ func runServer(ctx context.Context) error {
 
 	s := internalmcp.NewServer(alertmanagerURL, clientOpts...)
 
-	addr := viper.GetString("mcp.listen.address")
+	switch transport := viper.GetString("mcp.transport"); transport {
+	case transportStdio:
+		// Logs go to stderr, leaving stdout free for the JSON-RPC stream.
+		log.Info().
+			Str("alertmanager_url", alertmanagerURL).
+			Msg("serving alertmanager-mcp over stdio")
 
-	log.Info().
-		Str("alertmanager_url", alertmanagerURL).
-		Str("listen_address", addr).
-		Msg("starting alertmanager-mcp server")
+		if err := server.ServeStdio(s); err != nil {
+			return fmt.Errorf("stdio server error: %w", err)
+		}
+	case transportHTTP:
+		addr := viper.GetString("mcp.listen.address")
 
-	if err := server.NewStreamableHTTPServer(s).Start(addr); err != nil {
-		return fmt.Errorf("server error: %w", err)
+		log.Info().
+			Str("alertmanager_url", alertmanagerURL).
+			Str("listen_address", addr).
+			Msg("starting alertmanager-mcp server")
+
+		if err := server.NewStreamableHTTPServer(s).Start(addr); err != nil {
+			return fmt.Errorf("server error: %w", err)
+		}
+	default:
+		return fmt.Errorf(
+			"unknown transport %q (want %q or %q)",
+			transport, transportStdio, transportHTTP,
+		)
 	}
 
 	return nil
@@ -163,6 +191,7 @@ func Execute() {
 func initConfig() {
 	viper.AutomaticEnv()
 
+	mustBindEnv("mcp.transport", "MCP_TRANSPORT")
 	mustBindEnv("mcp.listen.address", "MCP_LISTEN_ADDRESS")
 	mustBindEnv("alertmanager.url", "ALERTMANAGER_URL")
 	mustBindEnv("alertmanager.username", "ALERTMANAGER_USERNAME")
