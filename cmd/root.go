@@ -66,8 +66,9 @@ func newRootCmd() *cobra.Command {
 		"OIDC scopes to request (add offline_access for longer-lived refresh)",
 	)
 	cmd.Flags().Int(
-		"alertmanager.oidc.redirect-port", 0,
-		"Fixed loopback port for the redirect URI (0 picks a free port)",
+		"alertmanager.oidc.redirect-port", alertmanager.DefaultRedirectPort,
+		"Loopback port for the OIDC redirect URI (0 picks a free port, "+
+			"which requires a wildcard port in the registered URI)",
 	)
 	cmd.Flags().Bool(
 		"alertmanager.oidc.use-id-token", false,

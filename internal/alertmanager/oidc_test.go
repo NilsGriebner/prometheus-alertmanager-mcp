@@ -4,10 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -21,6 +24,7 @@ type fakeProvider struct {
 	server *httptest.Server
 
 	gotVerifierChallenge string
+	gotRedirectURI       string
 	gotCode              string
 	issuedIDToken        string
 
@@ -54,6 +58,7 @@ func newFakeProvider(t *testing.T) *fakeProvider {
 	mux.HandleFunc("/auth", func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
 		p.gotVerifierChallenge = q.Get("code_challenge")
+		p.gotRedirectURI = q.Get("redirect_uri")
 
 		if q.Get("code_challenge_method") != "S256" {
 			http.Error(w, "expected S256 PKCE", http.StatusBadRequest)
@@ -556,5 +561,81 @@ func TestCachedTokenMissingFile(t *testing.T) {
 	_, err := cachedToken(filepath.Join(t.TempDir(), "absent.json"))
 	if !errors.Is(err, errNoCachedToken) {
 		t.Errorf("err = %v, want errNoCachedToken", err)
+	}
+}
+
+// A configured port must be the one the provider is told to redirect to.
+func TestOIDCUsesConfiguredRedirectPort(t *testing.T) {
+	provider := newFakeProvider(t)
+	useFakeBrowser(t)
+
+	// Take a free port, then hand it to the login flow.
+	probe, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("probing for a free port: %v", err)
+	}
+
+	port := probe.Addr().(*net.TCPAddr).Port
+
+	if closeErr := probe.Close(); closeErr != nil {
+		t.Fatalf("releasing probe port: %v", closeErr)
+	}
+
+	client, err := NewOIDCHTTPClient(t.Context(), OIDCConfig{
+		Issuer:       provider.server.URL,
+		ClientID:     "test-client",
+		RedirectPort: port,
+		CachePath:    filepath.Join(t.TempDir(), "token.json"),
+	})
+	if err != nil {
+		t.Fatalf("NewOIDCHTTPClient: %v", err)
+	}
+
+	mustGet(t, client)
+
+	want := fmt.Sprintf("http://127.0.0.1:%d/callback", port)
+	if provider.gotRedirectURI != want {
+		t.Errorf("redirect_uri = %q, want %q", provider.gotRedirectURI, want)
+	}
+}
+
+// A port already in use must fail with advice rather than a bare bind error.
+func TestOIDCBusyRedirectPortExplainsItself(t *testing.T) {
+	provider := newFakeProvider(t)
+	useFakeBrowser(t)
+
+	occupied, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("occupying a port: %v", err)
+	}
+
+	defer func() { _ = occupied.Close() }()
+
+	client, err := NewOIDCHTTPClient(t.Context(), OIDCConfig{
+		Issuer:       provider.server.URL,
+		ClientID:     "test-client",
+		RedirectPort: occupied.Addr().(*net.TCPAddr).Port,
+		CachePath:    filepath.Join(t.TempDir(), "token.json"),
+	})
+	if err != nil {
+		t.Fatalf("NewOIDCHTTPClient: %v", err)
+	}
+
+	upstream := httptest.NewServer(http.HandlerFunc(
+		func(_ http.ResponseWriter, _ *http.Request) {},
+	))
+	defer upstream.Close()
+
+	req, _ := http.NewRequestWithContext(
+		t.Context(), http.MethodGet, upstream.URL, nil,
+	)
+
+	_, err = client.Do(req)
+	if err == nil {
+		t.Fatal("expected the busy port to fail the login")
+	}
+
+	if !strings.Contains(err.Error(), "--alertmanager.oidc.redirect-port") {
+		t.Errorf("error does not suggest the flag: %v", err)
 	}
 }

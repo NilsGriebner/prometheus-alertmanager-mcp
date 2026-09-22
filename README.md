@@ -165,7 +165,7 @@ claude mcp add --scope user --transport http alertmanager http://127.0.0.1:8080/
 | `--alertmanager.oidc.client-id` | `ALERTMANAGER_OIDC_CLIENT_ID` | | OIDC client ID |
 | `--alertmanager.oidc.client-secret` | `ALERTMANAGER_OIDC_CLIENT_SECRET` | | Only for providers requiring a confidential client |
 | `--alertmanager.oidc.scopes` | `ALERTMANAGER_OIDC_SCOPES` | `openid,email` | Scopes to request, comma-separated |
-| `--alertmanager.oidc.redirect-port` | `ALERTMANAGER_OIDC_REDIRECT_PORT` | `0` | Loopback redirect port (`0` picks a free one) |
+| `--alertmanager.oidc.redirect-port` | `ALERTMANAGER_OIDC_REDIRECT_PORT` | `18080` | Loopback redirect port (`0` picks a free one) |
 | `--alertmanager.oidc.use-id-token` | `ALERTMANAGER_OIDC_USE_ID_TOKEN` | `false` | Send the ID token instead of the access token |
 | `--alertmanager.oidc.cache-path` | `ALERTMANAGER_OIDC_CACHE_PATH` | user cache dir | Token cache file (`-` disables) |
 | `--log.level` | `LOG_LEVEL` | `info` | Log level (debug, info, warn, error) |
@@ -205,19 +205,22 @@ permissions and refreshed silently, so later starts do not prompt again.
 
 #### Registering the client
 
-Register a **public** client (PKCE, no secret) with a loopback redirect URI.
-With the default `--alertmanager.oidc.redirect-port 0` the port is chosen at
-random, so the provider must allow a wildcard port, as RFC 8252 §7.3 recommends:
+Register a **public** client (PKCE, no secret) with this loopback redirect URI:
+
+```
+http://127.0.0.1:18080/callback
+```
+
+That is the default port, so nothing else needs configuring. Pick another with
+`--alertmanager.oidc.redirect-port` if 18080 is taken on your machine, and
+register that one instead.
+
+Setting the port to `0` picks a free one at random on every login. That avoids
+port clashes entirely, but the provider then has to accept a wildcard port, as
+RFC 8252 §7.3 recommends:
 
 ```
 http://127.0.0.1:*/callback
-```
-
-If your provider insists on an exact URI, pin the port and register it:
-
-```bash
-alertmanager-mcp ... --alertmanager.oidc.redirect-port 18080
-# register http://127.0.0.1:18080/callback
 ```
 
 #### Troubleshooting
@@ -227,7 +230,8 @@ alertmanager-mcp ... --alertmanager.oidc.redirect-port 18080
 | `401` from Alertmanager with a token that looks valid | The proxy rejects the access token's audience. Add an audience mapper on the provider so the access token carries the proxy's expected `aud`. Failing that, `--alertmanager.oidc.use-id-token` sends the ID token instead — a workaround, not the correct fix. |
 | Browser prompt on every start | No refresh token, or it expired with the SSO session. Add `offline_access` to `--alertmanager.oidc.scopes`. |
 | Provider rejects the token exchange without a secret | The client is registered as confidential. Re-register it as public, or pass `--alertmanager.oidc.client-secret`. Note a secret shipped to every workstation is not secret; RFC 8252 §8.5 advises against it. |
-| `invalid redirect_uri` | The loopback URI is not registered. See [Registering the client](#registering-the-client). |
+| `invalid redirect_uri` | The loopback URI is not registered. Register `http://127.0.0.1:18080/callback`, or whichever port you set. See [Registering the client](#registering-the-client). |
+| `opening loopback listener on port 18080` | Something else holds the port. Pick a free one with `--alertmanager.oidc.redirect-port` and register it too. |
 | No browser opens under Docker | Expected; the login cannot run in a container. Run the server natively instead. |
 
 ## Development

@@ -32,6 +32,11 @@ const (
 	stateEntropyBytes = 32
 )
 
+// DefaultRedirectPort is the loopback port used for the OIDC redirect URI
+// unless another one is configured. It is fixed rather than random so that
+// http://127.0.0.1:18080/callback can be registered once with the provider.
+const DefaultRedirectPort = 18080
+
 // OIDCConfig describes the authorization code + PKCE login used to obtain
 // bearer tokens for an OIDC-protected Alertmanager API.
 type OIDCConfig struct {
@@ -47,9 +52,10 @@ type OIDCConfig struct {
 	ClientSecret string
 	Scopes       []string
 
-	// RedirectPort is the fixed loopback port for the redirect URI. Zero picks
-	// a random free port, which requires the provider to allow a wildcard port
-	// on the registered redirect URI.
+	// RedirectPort is the loopback port for the redirect URI. Zero picks a
+	// random free port, which needs the provider to allow a wildcard port on
+	// the registered redirect URI; the command defaults it to
+	// DefaultRedirectPort so a single exact URI can be registered instead.
 	RedirectPort int
 
 	// UseIDToken sends the ID token instead of the access token as the bearer
@@ -321,6 +327,14 @@ func browserLogin(
 
 	listener, err := lc.Listen(ctx, "tcp", fmt.Sprintf("127.0.0.1:%d", port))
 	if err != nil {
+		if port != 0 {
+			return nil, fmt.Errorf(
+				"opening loopback listener on port %d: %w; "+
+					"choose a free port with --alertmanager.oidc.redirect-port "+
+					"and register it with the provider", port, err,
+			)
+		}
+
 		return nil, fmt.Errorf("opening loopback listener: %w", err)
 	}
 	defer func() { _ = listener.Close() }()
