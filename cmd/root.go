@@ -38,8 +38,9 @@ func newRootCmd() *cobra.Command {
 		"MCP transport: stdio (client owns the process) or http",
 	)
 	cmd.Flags().String(
-		"mcp.listen.address", ":8080",
-		"Address to listen on (e.g. :8080, 0.0.0.0:9094)",
+		"mcp.listen.address", "127.0.0.1:8080",
+		"Address to listen on; loopback by default because the MCP endpoint "+
+			"is unauthenticated (set 0.0.0.0:8080 to expose it deliberately)",
 	)
 	cmd.Flags().String(
 		"alertmanager.url", "",
