@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -90,9 +91,11 @@ type endpoints struct {
 }
 
 // NewOIDCHTTPClient returns an HTTP client that attaches an OIDC bearer token
-// to every request, refreshing it as needed. A cached token is reused when
-// still valid or refreshable; otherwise the user is sent through a browser
-// login on a loopback redirect URI.
+// to every request, refreshing it as needed.
+//
+// Discovery and login are deferred to the first request. Logging in eagerly
+// would block a stdio server before it can answer the MCP handshake, and the
+// client would give up while the browser tab was still open.
 func NewOIDCHTTPClient(
 	ctx context.Context, cfg OIDCConfig,
 ) (*http.Client, error) {
@@ -100,22 +103,94 @@ func NewOIDCHTTPClient(
 		return nil, err
 	}
 
-	eps, err := discover(ctx, cfg.Issuer)
-	if err != nil {
-		return nil, err
+	return &http.Client{
+		Transport: &bearerTransport{
+			tokens:     &tokenManager{baseCtx: ctx, cfg: cfg},
+			useIDToken: cfg.UseIDToken,
+		},
+	}, nil
+}
+
+// tokenManager owns the OIDC token: it logs in on demand, refreshes, persists
+// and re-authenticates when the refresh token is no longer accepted. Requests
+// are served concurrently, so every field is guarded by mu.
+type tokenManager struct {
+	mu      sync.Mutex
+	baseCtx context.Context //nolint:containedctx // outlives any single request
+	cfg     OIDCConfig
+
+	oauthCfg *oauth2.Config
+	source   oauth2.TokenSource
+
+	lastAccessToken string
+	// lastIDToken is retained because providers need not repeat the ID token
+	// in a refresh response.
+	lastIDToken string
+}
+
+// credential returns the bearer value for a request, logging in if needed.
+func (m *tokenManager) credential(useIDToken bool) (string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.source == nil {
+		if err := m.initLocked(); err != nil {
+			return "", err
+		}
 	}
 
-	oauthCfg := &oauth2.Config{
-		ClientID:     cfg.ClientID,
-		ClientSecret: cfg.ClientSecret,
-		Scopes:       cfg.Scopes,
+	token, err := m.source.Token()
+	if err != nil {
+		if !isGrantRejected(err) {
+			return "", fmt.Errorf("obtaining access token: %w", err)
+		}
+
+		// The refresh token is no longer accepted, e.g. the SSO session ended.
+		// Drop the stale cache and send the user through login once more.
+		log.Info().Msg("stored OIDC session rejected, logging in again")
+
+		if loginErr := m.loginLocked(); loginErr != nil {
+			return "", loginErr
+		}
+
+		token, err = m.source.Token()
+		if err != nil {
+			return "", fmt.Errorf("obtaining access token after login: %w", err)
+		}
+	}
+
+	m.recordLocked(token)
+
+	if !useIDToken {
+		return token.AccessToken, nil
+	}
+
+	if m.lastIDToken == "" {
+		return "", errors.New("token response contained no ID token")
+	}
+
+	return m.lastIDToken, nil
+}
+
+// initLocked resolves the provider and restores a cached session, falling back
+// to a browser login.
+func (m *tokenManager) initLocked() error {
+	eps, err := discover(m.baseCtx, m.cfg.Issuer)
+	if err != nil {
+		return err
+	}
+
+	m.oauthCfg = &oauth2.Config{
+		ClientID:     m.cfg.ClientID,
+		ClientSecret: m.cfg.ClientSecret,
+		Scopes:       m.cfg.Scopes,
 		Endpoint: oauth2.Endpoint{
 			AuthURL:  eps.AuthURL,
 			TokenURL: eps.TokenURL,
 		},
 	}
 
-	token, err := cachedToken(cfg.CachePath)
+	token, err := cachedToken(m.cfg.CachePath)
 	if err != nil && !errors.Is(err, errNoCachedToken) {
 		log.Warn().Err(err).Msg("ignoring unusable token cache")
 	}
@@ -126,28 +201,68 @@ func NewOIDCHTTPClient(
 	}
 
 	if token == nil {
-		token, err = browserLogin(ctx, oauthCfg, cfg.RedirectPort)
-		if err != nil {
-			return nil, err
-		}
-
-		if err := storeToken(cfg.CachePath, token); err != nil {
-			log.Warn().Err(err).Msg("failed to cache token")
-		}
+		return m.loginLocked()
 	}
 
-	source := &persistingTokenSource{
-		source:    oauthCfg.TokenSource(ctx, token),
-		cachePath: cfg.CachePath,
-		lastToken: token,
+	if idToken, ok := token.Extra("id_token").(string); ok {
+		m.lastIDToken = idToken
 	}
 
-	return &http.Client{
-		Transport: &bearerTransport{
-			source:     source,
-			useIDToken: cfg.UseIDToken,
-		},
-	}, nil
+	m.lastAccessToken = token.AccessToken
+	m.source = m.oauthCfg.TokenSource(m.baseCtx, token)
+
+	return nil
+}
+
+// loginLocked discards any cached session and runs the browser login.
+func (m *tokenManager) loginLocked() error {
+	m.source = nil
+	m.lastAccessToken = ""
+	m.lastIDToken = ""
+	discardToken(m.cfg.CachePath)
+
+	token, err := browserLogin(m.baseCtx, m.oauthCfg, m.cfg.RedirectPort)
+	if err != nil {
+		return err
+	}
+
+	m.source = m.oauthCfg.TokenSource(m.baseCtx, token)
+	m.recordLocked(token)
+
+	return nil
+}
+
+// recordLocked remembers a newly issued token and persists it.
+func (m *tokenManager) recordLocked(token *oauth2.Token) {
+	if idToken, ok := token.Extra("id_token").(string); ok && idToken != "" {
+		m.lastIDToken = idToken
+	}
+
+	if token.AccessToken == m.lastAccessToken {
+		return
+	}
+
+	m.lastAccessToken = token.AccessToken
+
+	if err := storeToken(m.cfg.CachePath, token); err != nil {
+		log.Warn().Err(err).Msg("failed to cache token")
+	}
+}
+
+// isGrantRejected reports whether the provider refused the grant outright,
+// which no amount of retrying will fix but a fresh login will.
+func isGrantRejected(err error) bool {
+	var retrieveErr *oauth2.RetrieveError
+	if !errors.As(err, &retrieveErr) {
+		return false
+	}
+
+	if retrieveErr.ErrorCode == "invalid_grant" {
+		return true
+	}
+
+	return retrieveErr.Response != nil &&
+		retrieveErr.Response.StatusCode == http.StatusBadRequest
 }
 
 // discover resolves the authorization and token endpoints from the issuer's
@@ -241,7 +356,10 @@ func browserLogin(
 	go func() {
 		if err := srv.Serve(listener); err != nil &&
 			!errors.Is(err, http.ErrServerClosed) {
-			results <- callbackResult{err: err}
+			select {
+			case results <- callbackResult{err: err}:
+			default:
+			}
 		}
 	}()
 
@@ -284,6 +402,16 @@ func browserLogin(
 func callbackHandler(
 	state string, results chan<- callbackResult,
 ) http.Handler {
+	// The browser may hit /callback more than once (prefetch, reload, provider
+	// retry). Only the first outcome matters, and a send must never block a
+	// handler goroutine, so later ones are dropped.
+	report := func(res callbackResult) {
+		select {
+		case results <- res:
+		default:
+		}
+	}
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/callback", func(w http.ResponseWriter, r *http.Request) {
 		query := r.URL.Query()
@@ -291,9 +419,9 @@ func callbackHandler(
 		if errCode := query.Get("error"); errCode != "" {
 			desc := query.Get("error_description")
 			http.Error(w, "login failed: "+errCode, http.StatusBadRequest)
-			results <- callbackResult{
+			report(callbackResult{
 				err: fmt.Errorf("provider returned %s: %s", errCode, desc),
-			}
+			})
 
 			return
 		}
@@ -302,7 +430,7 @@ func callbackHandler(
 		got, want := query.Get("state"), state
 		if subtle.ConstantTimeCompare([]byte(got), []byte(want)) != 1 {
 			http.Error(w, "state mismatch", http.StatusBadRequest)
-			results <- callbackResult{err: errors.New("state mismatch")}
+			report(callbackResult{err: errors.New("state mismatch")})
 
 			return
 		}
@@ -310,9 +438,9 @@ func callbackHandler(
 		code := query.Get("code")
 		if code == "" {
 			http.Error(w, "missing code", http.StatusBadRequest)
-			results <- callbackResult{
+			report(callbackResult{
 				err: errors.New("callback contained no authorization code"),
-			}
+			})
 
 			return
 		}
@@ -324,7 +452,7 @@ func callbackHandler(
 				"</body></html>",
 		))
 
-		results <- callbackResult{code: code}
+		report(callbackResult{code: code})
 	})
 
 	return mux
@@ -370,50 +498,16 @@ func randomString() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(buf), nil
 }
 
-// persistingTokenSource writes refreshed tokens back to the cache.
-type persistingTokenSource struct {
-	source    oauth2.TokenSource
-	cachePath string
-	lastToken *oauth2.Token
-}
-
-func (s *persistingTokenSource) Token() (*oauth2.Token, error) {
-	token, err := s.source.Token()
-	if err != nil {
-		return nil, fmt.Errorf("obtaining access token: %w", err)
-	}
-
-	if s.lastToken == nil || token.AccessToken != s.lastToken.AccessToken {
-		s.lastToken = token
-
-		if err := storeToken(s.cachePath, token); err != nil {
-			log.Warn().Err(err).Msg("failed to cache refreshed token")
-		}
-	}
-
-	return token, nil
-}
-
 // bearerTransport attaches the OIDC token to outgoing requests.
 type bearerTransport struct {
-	source     oauth2.TokenSource
+	tokens     *tokenManager
 	useIDToken bool
 }
 
 func (t *bearerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	token, err := t.source.Token()
+	credential, err := t.tokens.credential(t.useIDToken)
 	if err != nil {
 		return nil, err
-	}
-
-	credential := token.AccessToken
-	if t.useIDToken {
-		idToken, ok := token.Extra("id_token").(string)
-		if !ok || idToken == "" {
-			return nil, errors.New("token response contained no ID token")
-		}
-
-		credential = idToken
 	}
 
 	// RoundTrippers must not modify the request they are given.

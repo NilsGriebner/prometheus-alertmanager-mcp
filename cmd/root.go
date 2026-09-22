@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/NilsGriebner/prometheus-alertmanager-mcp/internal/alertmanager"
 	internalmcp "github.com/NilsGriebner/prometheus-alertmanager-mcp/internal/mcp"
@@ -213,6 +214,23 @@ func initConfig() {
 	mustBindEnv("log.level", "LOG_LEVEL")
 }
 
+// normalizeScopes flattens comma-separated scope values. Viper splits a slice
+// flag for us, but an environment variable arrives as one string and is split
+// on whitespace only, which would send the whole list as a single scope.
+func normalizeScopes(values []string) []string {
+	scopes := make([]string, 0, len(values))
+
+	for _, value := range values {
+		for _, scope := range strings.Split(value, ",") {
+			if scope = strings.TrimSpace(scope); scope != "" {
+				scopes = append(scopes, scope)
+			}
+		}
+	}
+
+	return scopes
+}
+
 // oidcConfigFromViper assembles the OIDC settings, resolving the default token
 // cache location when none was configured.
 func oidcConfigFromViper() alertmanager.OIDCConfig {
@@ -220,7 +238,7 @@ func oidcConfigFromViper() alertmanager.OIDCConfig {
 		Issuer:       viper.GetString("alertmanager.oidc.issuer"),
 		ClientID:     viper.GetString("alertmanager.oidc.client-id"),
 		ClientSecret: viper.GetString("alertmanager.oidc.client-secret"),
-		Scopes:       viper.GetStringSlice("alertmanager.oidc.scopes"),
+		Scopes:       normalizeScopes(viper.GetStringSlice("alertmanager.oidc.scopes")),
 		RedirectPort: viper.GetInt("alertmanager.oidc.redirect-port"),
 		UseIDToken:   viper.GetBool("alertmanager.oidc.use-id-token"),
 	}

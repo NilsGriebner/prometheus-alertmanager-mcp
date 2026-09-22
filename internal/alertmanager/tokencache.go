@@ -9,8 +9,12 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/rs/zerolog/log"
 	"golang.org/x/oauth2"
 )
+
+// tokenFileMode keeps the cached token readable only by its owner.
+const tokenFileMode = 0o600
 
 // errNoCachedToken reports that no token is cached, which is not a failure.
 var errNoCachedToken = errors.New("no cached token")
@@ -90,9 +94,48 @@ func storeToken(path string, token *oauth2.Token) error {
 		return fmt.Errorf("encoding token cache: %w", err)
 	}
 
-	if err := os.WriteFile(path, data, 0o600); err != nil {
-		return fmt.Errorf("writing token cache %s: %w", path, err)
+	// Write via a temporary file so a concurrent reader never observes a
+	// half-written cache.
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".token-*.json")
+	if err != nil {
+		return fmt.Errorf("creating temporary token cache: %w", err)
+	}
+
+	tmpName := tmp.Name()
+
+	defer func() {
+		_ = tmp.Close()
+		_ = os.Remove(tmpName)
+	}()
+
+	if err := tmp.Chmod(tokenFileMode); err != nil {
+		return fmt.Errorf("securing temporary token cache: %w", err)
+	}
+
+	if _, err := tmp.Write(data); err != nil {
+		return fmt.Errorf("writing temporary token cache: %w", err)
+	}
+
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("closing temporary token cache: %w", err)
+	}
+
+	if err := os.Rename(tmpName, path); err != nil {
+		return fmt.Errorf("replacing token cache %s: %w", path, err)
 	}
 
 	return nil
+}
+
+// discardToken removes a cached token that the provider no longer accepts, so
+// the next start does not retry a session that cannot be revived.
+func discardToken(path string) {
+	if path == "" {
+		return
+	}
+
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		log.Warn().Err(err).Str("path", path).
+			Msg("failed to remove stale token cache")
+	}
 }

@@ -139,9 +139,9 @@ Docker, keeping credentials out of the arguments:
 }
 ```
 
-With OIDC, the browser opens on the **first tool call**, not when Claude Code
-starts, because that is when the server is spawned. The token is cached, so it
-happens once rather than every session.
+With OIDC, the browser opens on the **first tool call**, not while the client is
+connecting, so the MCP handshake is never held up by the login. The token is
+cached afterwards, so it happens once rather than every session.
 
 ### http
 
@@ -164,7 +164,7 @@ claude mcp add --scope user --transport http alertmanager http://127.0.0.1:8080/
 | `--alertmanager.oidc.issuer` | `ALERTMANAGER_OIDC_ISSUER` | | OIDC issuer URL; enables browser login |
 | `--alertmanager.oidc.client-id` | `ALERTMANAGER_OIDC_CLIENT_ID` | | OIDC client ID |
 | `--alertmanager.oidc.client-secret` | `ALERTMANAGER_OIDC_CLIENT_SECRET` | | Only for providers requiring a confidential client |
-| `--alertmanager.oidc.scopes` | `ALERTMANAGER_OIDC_SCOPES` | `openid,email` | Scopes to request |
+| `--alertmanager.oidc.scopes` | `ALERTMANAGER_OIDC_SCOPES` | `openid,email` | Scopes to request, comma-separated |
 | `--alertmanager.oidc.redirect-port` | `ALERTMANAGER_OIDC_REDIRECT_PORT` | `0` | Loopback redirect port (`0` picks a free one) |
 | `--alertmanager.oidc.use-id-token` | `ALERTMANAGER_OIDC_USE_ID_TOKEN` | `false` | Send the ID token instead of the access token |
 | `--alertmanager.oidc.cache-path` | `ALERTMANAGER_OIDC_CACHE_PATH` | user cache dir | Token cache file (`-` disables) |
