@@ -4,7 +4,7 @@ go 1.26.1
 
 require (
 	github.com/go-openapi/runtime v0.33.1
-	github.com/go-openapi/strfmt v0.27.0
+	github.com/go-openapi/strfmt v0.27.2
 	github.com/mark3labs/mcp-go v0.58.0
 	github.com/prometheus/alertmanager v0.34.0
 	github.com/rs/zerolog v1.35.1
