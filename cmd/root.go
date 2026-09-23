@@ -171,6 +171,13 @@ func clientOptsFromViper(
 		clientOpts = append(
 			clientOpts, alertmanager.WithHTTPClient(httpClient),
 		)
+	case oidcCfg.Issuer != "" || oidcCfg.ClientID != "":
+		// Half-configured OIDC used to fall through to no auth at all, so the
+		// first tool call failed with an opaque 401 from the Alertmanager side.
+		return nil, errors.New(
+			"oidc needs both --alertmanager.oidc.issuer and " +
+				"--alertmanager.oidc.client-id",
+		)
 	case viper.GetString("alertmanager.username") != "":
 		clientOpts = append(clientOpts,
 			alertmanager.WithBasicAuth(
