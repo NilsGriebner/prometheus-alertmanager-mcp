@@ -223,6 +223,73 @@ RFC 8252 §7.3 recommends:
 http://127.0.0.1:*/callback
 ```
 
+#### Example: registering the client in Keycloak
+
+Clients → **Create client**, then work through the three wizard steps:
+
+| Step | Setting | Value |
+|---|---|---|
+| General settings | Client ID | `alertmanager-mcp` |
+| Capability config | Client authentication | **Off** — this is what makes the client public; PKCE protects the flow instead |
+| Capability config | Authentication flow | **Standard flow** only; untick Direct access grants, Implicit and Service accounts |
+| Login settings | Valid redirect URIs | `http://127.0.0.1:18080/callback` |
+| Login settings | Root URL, Home URL, post logout URIs, Web origins | leave empty |
+
+Two things bite here. Keycloak honours a `*` only at the *end* of a redirect URI,
+so the wildcard-port form above does not match — register a fixed port. And the
+wizard renders a blank input for the URI fields it does not need; remove those
+rows with the **−** button, because an empty row is submitted and rejected with
+`A redirect URI is not a valid URI`.
+
+No Web origins entry is needed: the CLI exchanges the authorization code itself,
+so no browser JavaScript ever calls the token endpoint.
+
+##### Mappers
+
+Whatever sits in front of Alertmanager decides which claims it requires, and
+Keycloak will not emit them by default. Add them under Clients →
+`alertmanager-mcp` → Client scopes → **`alertmanager-mcp-dedicated`** → Add
+mapper → By configuration:
+
+| Mapper | Configure | Needed when |
+|---|---|---|
+| **Audience** | Included Client Audience = the proxy's own client ID; Add to access token **On** | The proxy checks `aud`. Without it the token is valid but refused. |
+| **Group Membership** | Token Claim Name `groups`; **Full group path Off**; Add to access token **On** | The proxy authorises on group membership. |
+
+`Full group path` defaults to **On**, which emits `/ops-team` rather than
+`ops-team`. A policy matching the bare name then fails, even though the user is
+in the group.
+
+For an Envoy Gateway `SecurityPolicy`, the claim the mapper has to satisfy is
+spelled out in the Allow rule:
+
+```yaml
+authorization:
+  defaultAction: Deny
+  rules:
+    - action: Allow
+      principal:
+        jwt:
+          provider: keycloak
+          claims:
+            - name: groups
+              valueType: StringArray
+              values: [ops-team]
+```
+
+##### Long-lived logins
+
+`offline_access` needs no client configuration — Keycloak assigns it as an
+optional client scope to new clients, so requesting it is enough:
+
+```
+--alertmanager.oidc.scopes=openid,email,offline_access
+```
+
+The realm's **Offline Session Idle** and **Offline Session Max** (Realm settings
+→ Sessions) cap how long the refresh token survives, so they bound how often you
+are sent back to the browser.
+
 #### Troubleshooting
 
 | Symptom | Cause and fix |
@@ -230,6 +297,8 @@ http://127.0.0.1:*/callback
 | `401` from Alertmanager with a token that looks valid | The proxy rejects the access token's audience. Add an audience mapper on the provider so the access token carries the proxy's expected `aud`. Failing that, `--alertmanager.oidc.use-id-token` sends the ID token instead — a workaround, not the correct fix. |
 | Browser prompt on every start | No refresh token, or it expired with the SSO session. Add `offline_access` to `--alertmanager.oidc.scopes`. |
 | Provider rejects the token exchange without a secret | The client is registered as confidential. Re-register it as public, or pass `--alertmanager.oidc.client-secret`. Note a secret shipped to every workstation is not secret; RFC 8252 §8.5 advises against it. |
+| `403` with body `RBAC: access denied` | Authentication succeeded but the proxy's authorisation rule did not match — typically a missing `groups` claim, or one carrying full group paths. Add a Group Membership mapper. |
+| `oidc needs both --alertmanager.oidc.issuer and --alertmanager.oidc.client-id` at startup | Only one of the pair is set. OIDC needs both; with one missing the server would otherwise send unauthenticated requests and fail later with an opaque `401`. Set both, or neither. |
 | `invalid redirect_uri` | The loopback URI is not registered. Register `http://127.0.0.1:18080/callback`, or whichever port you set. See [Registering the client](#registering-the-client). |
 | `opening loopback listener on port 18080` | Something else holds the port. Pick a free one with `--alertmanager.oidc.redirect-port` and register it too. |
 | No browser opens under Docker | Expected; the login cannot run in a container. Run the server natively instead. |
