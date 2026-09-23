@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"alertmanagermcp/internal/alertmanager"
+	"github.com/NilsGriebner/prometheus-alertmanager-mcp/internal/alertmanager"
 
 	"github.com/go-openapi/strfmt"
 	"github.com/mark3labs/mcp-go/mcp"

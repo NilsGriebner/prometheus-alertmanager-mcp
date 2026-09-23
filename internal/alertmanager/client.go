@@ -2,6 +2,7 @@ package alertmanager
 
 import (
 	"context"
+	"net/http"
 	"net/url"
 
 	httptransport "github.com/go-openapi/runtime/client"
@@ -24,14 +25,23 @@ type Client struct {
 type ClientOption func(*clientConfig)
 
 type clientConfig struct {
-	username string
-	password string
+	username   string
+	password   string
+	httpClient *http.Client
 }
 
 func WithBasicAuth(username, password string) ClientOption {
 	return func(c *clientConfig) {
 		c.username = username
 		c.password = password
+	}
+}
+
+// WithHTTPClient makes the Alertmanager transport use the given HTTP client,
+// e.g. an OIDC client that attaches and refreshes a bearer token.
+func WithHTTPClient(client *http.Client) ClientOption {
+	return func(c *clientConfig) {
+		c.httpClient = client
 	}
 }
 
@@ -48,9 +58,17 @@ func NewClient(baseURL string, opts ...ClientOption) *Client {
 		schemes = []string{"http"}
 	}
 
-	transport := httptransport.New(
-		host, amclient.DefaultBasePath, schemes,
-	)
+	var transport *httptransport.Runtime
+	if cfg.httpClient != nil {
+		transport = httptransport.NewWithClient(
+			host, amclient.DefaultBasePath, schemes, cfg.httpClient,
+		)
+	} else {
+		transport = httptransport.New(
+			host, amclient.DefaultBasePath, schemes,
+		)
+	}
+
 	if cfg.username != "" {
 		transport.DefaultAuthentication = httptransport.BasicAuth(
 			cfg.username, cfg.password,

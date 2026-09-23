@@ -1,6 +1,6 @@
 package main
 
-import "alertmanagermcp/cmd"
+import "github.com/NilsGriebner/prometheus-alertmanager-mcp/cmd"
 
 func main() {
 	cmd.Execute()

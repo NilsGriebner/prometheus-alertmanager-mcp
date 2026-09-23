@@ -199,6 +199,16 @@ linters:
       - legacy
       - std-error-handling
     rules:
+      # gosec's taint analysis (G702-G704) treats every CLI flag value as
+      # untrusted input. This server has no remote input: the OIDC issuer, the
+      # browser target derived from it and the token cache path all come from
+      # the operator's own flags, on a machine the operator already owns.
+      # nolint directives cannot be used instead, because nolintlint does not
+      # see suppressions of these rules and reports them as unused.
+      - linters:
+          - gosec
+        text: "G70[234]"
+        path: internal/alertmanager/
       - linters:
           - revive
         text: "avoid meaningless package names"

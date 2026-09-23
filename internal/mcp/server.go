@@ -1,7 +1,7 @@
 package mcp
 
 import (
-	"alertmanagermcp/internal/alertmanager"
+	"github.com/NilsGriebner/prometheus-alertmanager-mcp/internal/alertmanager"
 
 	mcpserver "github.com/mark3labs/mcp-go/server"
 )
