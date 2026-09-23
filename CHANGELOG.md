@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v1.0.0] - 2026-09-23
+### :sparkles: New Features
+- [`da8d0a0`](https://github.com/NilsGriebner/prometheus-alertmanager-mcp/commit/da8d0a048ae7c178cd1405c893ca64f59bd75a3c) - oidc auth *(PR [#16](https://github.com/NilsGriebner/prometheus-alertmanager-mcp/pull/16) by [@NilsGriebner](https://github.com/NilsGriebner))*
+
+### :wrench: Chores
+- [`ca4dc13`](https://github.com/NilsGriebner/prometheus-alertmanager-mcp/commit/ca4dc13cc31b5e2dcf5b884a8d7c4f24f6f78539) - release v0.0.3 [skip ci] *(commit by [@NilsGriebner](https://github.com/NilsGriebner))*
+
+
 ## [v0.0.3] - 2026-08-26
 ### :bug: Bug Fixes
 - [`f86ce90`](https://github.com/NilsGriebner/prometheus-alertmanager-mcp/commit/f86ce900135ce51208a23457f840dc67f5bd20fb) - log configuration *(commit by [@NilsGriebner](https://github.com/NilsGriebner))*
@@ -28,3 +36,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [v0.0.1]: https://github.com/NilsGriebner/prometheus-alertmanager-mcp/compare/v0.0.0...v0.0.1
 [v0.0.2]: https://github.com/NilsGriebner/prometheus-alertmanager-mcp/compare/v0.0.1...v0.0.2
 [v0.0.3]: https://github.com/NilsGriebner/prometheus-alertmanager-mcp/compare/v0.0.2...v0.0.3
+[v1.0.0]: https://github.com/NilsGriebner/prometheus-alertmanager-mcp/compare/v0.0.3...v1.0.0
